@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4×4 Bingo</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #172033;
+      --muted: #667085;
+      --border: #d8dee9;
+      --accent: #2563eb;
+      --accent-light: #dbeafe;
+      --success: #16a34a;
+      --success-light: #dcfce7;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 520px;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 30px;
+    }
+
+    .subtitle {
+      margin: 0 0 20px;
+      color: var(--muted);
+    }
+
+    .score {
+      display: inline-block;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 18px;
+      margin-bottom: 18px;
+    }
+
+    .score strong {
+      font-size: 22px;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      width: min(100%, 430px);
+      margin: 0 auto;
+    }
+
+    .cell {
+      aspect-ratio: 1;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      background: var(--card);
+      color: var(--text);
+      font-size: clamp(22px, 7vw, 34px);
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    .cell:hover:not(:disabled) {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    .cell.marked {
+      background: var(--accent-light);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .cell.completed {
+      background: var(--success-light);
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+
+    button.control {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button.control.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+
+    button.control:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 18px;
+      min-height: 24px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .bingo {
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 12px;
+      background: var(--success-light);
+      color: var(--success);
+      font-size: 24px;
+      font-weight: bold;
+      display: none;
+    }
+
+    .bingo.show {
+      display: block;
+    }
+
+    .instructions {
+      margin-top: 24px;
+      text-align: left;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    @media (max-width: 420px) {
+      body { padding: 18px 10px; }
+      h1 { font-size: 26px; }
+      .board { gap: 6px; }
+      .cell { border-radius: 9px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <h1>4×4 Bingo</h1>
+    <p id="subtitle" class="subtitle">Set up your board</p>
+
+    <div class="score">
+      Lines completed: <strong id="score">0 / 4</strong>
+    </div>
+
+    <div id="board" class="board"></div>
+
+    <div class="controls">
+      <button id="startBtn" class="control primary" disabled>
+        Start Game
+      </button>
+      <button id="resetBtn" class="control">
+        Reset
+      </button>
+    </div>
+
+    <div id="status" class="status">
+      Click each box once. Numbers 1–16 will be placed automatically.
+    </div>
+
+    <div id="bingo" class="bingo">
+      BINGO! You completed 4 lines!
+    </div>
+
+    <div class="instructions">
+      <strong>How to play</strong><br>
+      1. Click all 16 boxes to create your random board.<br>
+      2. Click <strong>Start Game</strong>.<br>
+      3. When a number is called, click that number on your board.<br>
+      4. Horizontal, vertical and diagonal lines count.<br>
+      5. The first player to complete 4 lines gets BINGO.
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      const board = document.getElementById("board");
+      const scoreElement = document.getElementById("score");
+      const statusElement = document.getElementById("status");
+      const subtitleElement = document.getElementById("subtitle");
+      const startButton = document.getElementById("startBtn");
+      const resetButton = document.getElementById("resetBtn");
+      const bingoElement = document.getElementById("bingo");
+
+      const lines = [
+        // Rows
+        [0, 1, 2, 3],
+        [4, 5, 6, 7],
+        [8, 9, 10, 11],
+        [12, 13, 14, 15],
+
+        // Columns
+        [0, 4, 8, 12],
+        [1, 5, 9, 13],
+        [2, 6, 10, 14],
+        [3, 7, 11, 15],
+
+        // Diagonals
+        [0, 5, 10, 15],
+        [3, 6, 9, 12]
+      ];
+
+      let cells = [];
+      let nextNumber = 1;
+      let phase = "setup";
+      let completedLines = new Set();
+
+      function createBoard() {
+        board.innerHTML = "";
+        cells = [];
+
+        for (let i = 0; i < 16; i++) {
+          const cell = document.createElement("button");
+
+          cell.type = "button";
+          cell.className = "cell";
+          cell.setAttribute("aria-label", `Box ${i + 1}`);
+
+          cell.addEventListener("click", () => {
+            handleCellClick(i);
+          });
+
+          board.appendChild(cell);
+          cells.push(cell);
+        }
+      }
+
+      function handleCellClick(index) {
+        if (phase === "setup") {
+          setupCell(index);
+        } else if (phase === "play") {
+          markCell(index);
+        }
+      }
+
+      function setupCell(index) {
+        const cell = cells[index];
+
+        if (cell.textContent !== "" || nextNumber > 16) {
+          return;
+        }
+
+        cell.textContent = nextNumber;
+        nextNumber++;
+
+        if (nextNumber === 17) {
+          startButton.disabled = false;
+          subtitleElement.textContent = "Your board is ready";
+          statusElement.textContent =
+            "All numbers are placed. Click Start Game.";
+        } else {
+          statusElement.textContent =
+            `Choose another box. Number ${nextNumber} will be placed next.`;
+        }
+      }
+
+      function startGame() {
+        if (nextNumber !== 17) {
+          return;
+        }
+
+        phase = "play";
+        startButton.disabled = true;
+
+        subtitleElement.textContent = "Game in progress";
+        statusElement.textContent =
+          "Click a number whenever it is called.";
+      }
+
+      function markCell(index) {
+        const cell = cells[index];
+
+        if (cell.classList.contains("marked")) {
+          return;
+        }
+
+        cell.classList.add("marked");
+        checkLines();
+      }
+
+      function checkLines() {
+        lines.forEach((line, lineIndex) => {
+          if (completedLines.has(lineIndex)) {
+            return;
+          }
+
+          const complete = line.every(index =>
+            cells[index].classList.contains("marked")
+          );
+
+          if (complete) {
+            completedLines.add(lineIndex);
+
+            line.forEach(index => {
+              cells[index].classList.add("completed");
+            });
+          }
+        });
+
+        const count = completedLines.size;
+
+        scoreElement.textContent = `${count} / 4`;
+
+        if (count >= 4) {
+          phase = "finished";
+
+          cells.forEach(cell => {
+            cell.disabled = true;
+          });
+
+          subtitleElement.textContent = "Game finished";
+          statusElement.textContent = "Congratulations!";
+          bingoElement.classList.add("show");
+        } else if (count === 1) {
+          statusElement.textContent = "1 line completed. Keep going!";
+        } else if (count > 1) {
+          statusElement.textContent =
+            `${count} lines completed. Keep going!`;
+        }
+      }
+
+      function resetGame() {
+        phase = "setup";
+        nextNumber = 1;
+        completedLines = new Set();
+
+        scoreElement.textContent = "0 / 4";
+        subtitleElement.textContent = "Set up your board";
+        statusElement.textContent =
+          "Click each box once. Numbers 1–16 will be placed automatically.";
+
+        startButton.disabled = true;
+        bingoElement.classList.remove("show");
+
+        createBoard();
+      }
+
+      startButton.addEventListener("click", startGame);
+      resetButton.addEventListener("click", resetGame);
+
+      createBoard();
+    })();
+  </script>
+</body>
+</html>
